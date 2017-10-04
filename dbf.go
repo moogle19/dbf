@@ -1,16 +1,16 @@
-package godbf
+package dbf
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
 	"github.com/axgle/mahonia"
 )
 
-func NewFromFile(fileName string, fileEncoding string) (table *DbfTable, err error) {
+func NewFromFile(fileName string, fileEncoding string) (table *Table, err error) {
 	s, err := readFile(fileName)
-
 	if err != nil {
 		return nil, err
 	}
@@ -18,13 +18,43 @@ func NewFromFile(fileName string, fileEncoding string) (table *DbfTable, err err
 	return createDbfTable(s, fileEncoding)
 }
 
-func NewFromByteArray(data []byte, fileEncoding string) (table *DbfTable, err error) {
+func NewFromByteArray(data []byte, fileEncoding string) (table *Table, err error) {
 	return createDbfTable(data, fileEncoding)
 }
 
-func createDbfTable(s []byte, fileEncoding string) (table *DbfTable, err error) {
+type meta struct {
+	signature   uint8
+	updateYear  uint8
+	updateMonth uint8
+	updateDay   uint8
+	recordCount uint32
+	headerSize  uint16
+	recordSize  uint16
+}
+
+func parseMetadata(reader io.Reader) (*meta, error) {
+	m := make([]byte, 11)
+	n, err := reader.Read(m)
+	if err != nil {
+		return nil, err
+	} else if n != 11 {
+		return nil, fmt.Errorf("file too short: %d bytes", n)
+	}
+
+	return &meta{
+		signature:   m[0],
+		updateYear:  m[1],
+		updateMonth: m[2],
+		updateDay:   m[3],
+		recordCount: uint32(m[4]) | (uint32(m[5]) << 8) | (uint32(m[6]) << 16) | (uint32(m[7]) << 24),
+		headerSize:  uint16(m[8]) | (uint16(m[9]) << 8),
+		recordSize:  uint16(m[10]) | (uint16(m[11]) << 8),
+	}, nil
+}
+
+func createDbfTable(s []byte, fileEncoding string) (table *Table, err error) {
 	// Create and pupulate DbaseTable struct
-	dt := new(DbfTable)
+	dt := new(Table)
 
 	dt.fileEncoding = fileEncoding
 	dt.encoder = mahonia.NewEncoder(fileEncoding)
@@ -71,18 +101,7 @@ func createDbfTable(s []byte, fileEncoding string) (table *DbfTable, err error) 
 		if err != nil {
 			return nil, err
 		}
-
-		//fmt.Printf("Field name:%v\n", fieldName)
-		//fmt.Printf("Field data type:%v\n", string(s[offset+11]))
-		//fmt.Printf("Field length:%v\n", s[offset+16])
-		//fmt.Println("-----------------------------------------------")
 	}
-
-	//fmt.Printf("DbfReader:\n%#v\n", dt)
-	//fmt.Printf("DbfReader:\n%#v\n", int(dt.Fields[2].fieldLength))
-
-	//fmt.Printf("num records in table:%v\n", (dt.numberOfRecords))
-	//fmt.Printf("lenght of each record:%v\n", (dt.lengthOfEachRecord))
 
 	// Since we are reading dbase file from the disk at least at this
 	// phase changing schema of dbase file is not allowed.
@@ -94,10 +113,9 @@ func createDbfTable(s []byte, fileEncoding string) (table *DbfTable, err error) 
 	return dt, nil
 }
 
-func (dt *DbfTable) SaveFile(filename string) (err error) {
+func (dt *Table) SaveFile(filename string) (err error) {
 
 	f, err := os.Create(filename)
-
 	if err != nil {
 		return err
 	}

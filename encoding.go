@@ -1,4 +1,4 @@
-package godbf
+package dbf
 
 import (
 	"fmt"
