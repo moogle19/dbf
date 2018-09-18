@@ -9,28 +9,46 @@ import (
 	"github.com/axgle/mahonia"
 )
 
+const (
+	// Version5 represents dBase Level5
+	Version5 Version = 3
+	// Version7 represents dBase Level7
+	Version7 Version = 4
+	// VersionUnknown represents an unknown dBase Level
+	VersionUnknown Version = 0
+)
+
+// Version defines the dBase Level / Version
+type Version byte
+
+func (v Version) String() string {
+	switch v {
+	case Version5:
+		return "dBase Level 5"
+	case Version7:
+		return "dBase Level 7"
+	default:
+		return "unknown dBase Level"
+	}
+}
+
 // Field is a single field of the dBase table
 type Field struct {
-	fieldName          string
-	fieldType          string
-	fieldLength        uint8
-	fieldDecimalPlaces uint8
-	fieldStore         [32]byte
+	name          string
+	fieldType     string
+	length        uint8
+	decimalPlaces uint8
+	store         [32]byte
 }
 
 // Table is a table of the dBase database
 type Table struct {
 	// dbase file header information
-	fileSignature         uint8 // Valid dBASE III PLUS table file (03h without a memo .DBT file; 83h with a memo)
-	updateYear            uint8 // Date of last update; in YYMMDD format.
-	updateMonth           uint8
-	updateDay             uint8
-	numberOfRecords       uint32   // Number of records in the table.
-	numberOfBytesInHeader uint16   // Number of bytes in the header.
-	lengthOfEachRecord    uint16   // Number of bytes in the record.
-	reservedBytes         [20]byte // Reserved bytes
-	fieldDescriptor       [32]byte // Field descriptor array
-	fieldTerminator       int8     // 0Dh stored as the field terminator.
+	Header *Header
+
+	reservedBytes   [20]byte // Reserved bytes
+	fieldDescriptor [32]byte // Field descriptor array
+	fieldTerminator int8     // 0Dh stored as the field terminator.
 
 	numberOfFields int // number of fiels/colums in dbase file
 
@@ -39,6 +57,7 @@ type Table struct {
 
 	// used to map field names to index
 	fieldMap map[string]int
+
 	/*
 	   "dataEntryStarted" flag is used to control whether we can change
 	   dbase table structure when data enty started you can not change
@@ -61,17 +80,16 @@ type Table struct {
 }
 
 // Sets field value by index
-func (dt *Table) SetFieldValueByName(row int, fieldName string, value string) (err error) {
+func (dt *Table) SetFieldValueByName(row int, fieldName string, value string) error {
 
-	fieldIndex, ok := dt.fieldMap[fieldName]
+	i, ok := dt.fieldMap[fieldName]
 
 	if !ok {
 		return errors.New("Field name \"" + fieldName + "\" does not exist")
 	}
 
 	// set field value and return
-	dt.SetFieldValue(row, fieldIndex, value)
-	return
+	return dt.SetFieldValue(row, i, value)
 }
 
 // Sets field value by name
@@ -79,22 +97,18 @@ func (dt *Table) SetFieldValue(row int, fieldIndex int, value string) (err error
 
 	b := []byte(dt.encoder.ConvertString(value))
 
-	fieldLength := int(dt.fields[fieldIndex].fieldLength)
+	fieldLength := int(dt.fields[fieldIndex].length)
 
 	// locate the offset of the field in DbfTable dataStore
-	offset := int(dt.numberOfBytesInHeader)
-	lengthOfRecord := int(dt.lengthOfEachRecord)
+	offset := dt.Header.HeaderSize()
+	lengthOfRecord := dt.Header.RecordSize()
 
 	offset = offset + (row * lengthOfRecord)
 
 	recordOffset := 1
 
-	for i := 0; i < len(dt.fields); i++ {
-		if i == fieldIndex {
-			break
-		} else {
-			recordOffset += int(dt.fields[i].fieldLength)
-		}
+	for _, field := range dt.fields[:fieldIndex] {
+		recordOffset += int(field.length)
 	}
 
 	// first fill the field with space values
@@ -123,8 +137,8 @@ func (dt *Table) SetFieldValue(row int, fieldIndex int, value string) (err error
 
 // RowIsDeleted checks if row is marked as deleted
 func (dt *Table) RowIsDeleted(row int) bool {
-	offset := int(dt.numberOfBytesInHeader)
-	lengthOfRecord := int(dt.lengthOfEachRecord)
+	offset := int(dt.Header.headerSize)
+	lengthOfRecord := int(dt.Header.recordSize)
 	offset = offset + (row * lengthOfRecord)
 	return (dt.dataStore[offset:(offset + 1)][0] == 0x2A)
 }
@@ -132,22 +146,18 @@ func (dt *Table) RowIsDeleted(row int) bool {
 // FieldValue gets the value of the specified field
 func (dt *Table) FieldValue(row int, fieldIndex int) (value string) {
 
-	offset := int(dt.numberOfBytesInHeader)
-	lengthOfRecord := int(dt.lengthOfEachRecord)
+	offset := int(dt.Header.headerSize)
+	lengthOfRecord := int(dt.Header.recordSize)
 
 	offset = offset + (row * lengthOfRecord)
 
 	recordOffset := 1
 
-	for i := 0; i < len(dt.fields); i++ {
-		if i == fieldIndex {
-			break
-		} else {
-			recordOffset += int(dt.fields[i].fieldLength)
-		}
+	for _, field := range dt.fields[:fieldIndex] {
+		recordOffset += int(field.length)
 	}
 
-	temp := dt.dataStore[(offset + recordOffset):((offset + recordOffset) + int(dt.fields[fieldIndex].fieldLength))]
+	temp := dt.dataStore[(offset + recordOffset):((offset + recordOffset) + int(dt.fields[fieldIndex].length))]
 
 	for i := 0; i < len(temp); i++ {
 		if temp[i] == 0x00 {
@@ -197,15 +207,15 @@ func (dt *Table) AddNewRecord() (newRecordNumber int) {
 		dt.dataEntryStarted = true
 	}
 
-	newRecord := make([]byte, dt.lengthOfEachRecord)
-	dt.dataStore = appendSlice(dt.dataStore, newRecord)
+	newRecord := make([]byte, dt.Header.recordSize)
+	dt.dataStore = append(dt.dataStore, newRecord...)
 
 	// since row numbers are "0" based first we set newRecordNumber
 	// and then increment number of records in dbase table
-	newRecordNumber = int(dt.numberOfRecords)
+	newRecordNumber = int(dt.Header.recordCount)
 
-	dt.numberOfRecords++
-	s := uint32ToBytes(dt.numberOfRecords)
+	dt.Header.recordCount++
+	s := uint32ToBytes(dt.Header.recordCount)
 	dt.dataStore[4] = s[0]
 	dt.dataStore[5] = s[1]
 	dt.dataStore[6] = s[2]
@@ -236,7 +246,7 @@ func (dt *Table) AddFloatField(fieldName string, length uint8, decimalPlaces uin
 
 // NumberOfRecords return number of rows in dbase table
 func (dt *Table) NumberOfRecords() int {
-	return int(dt.numberOfRecords)
+	return int(dt.Header.recordCount)
 }
 
 // Fields return slice of DbfField
@@ -249,7 +259,7 @@ func (dt *Table) FieldNames() []string {
 	names := make([]string, 0)
 
 	for _, field := range dt.Fields() {
-		names = append(names, field.fieldName)
+		names = append(names, field.name)
 	}
 
 	return names
@@ -268,10 +278,10 @@ func (dt *Table) addField(fieldName string, fieldType byte, length uint8, decima
 	}
 
 	df := new(Field)
-	df.fieldName = normalizedFieldName
+	df.name = normalizedFieldName
 	df.fieldType = string(fieldType)
-	df.fieldLength = length
-	df.fieldDecimalPlaces = decimalPlaces
+	df.length = length
+	df.decimalPlaces = decimalPlaces
 
 	slice := dt.convertToByteSlice(normalizedFieldName, 10)
 
@@ -279,12 +289,12 @@ func (dt *Table) addField(fieldName string, fieldType byte, length uint8, decima
 
 	// Field name in ASCII (max 10 chracters)
 	for i := 0; i < len(slice); i++ {
-		df.fieldStore[i] = slice[i]
+		df.store[i] = slice[i]
 		//fmt.Printf("i:%s\n", string(slice[i]))
 	}
 
 	// Field names are terminated by 00h
-	df.fieldStore[10] = 0x00
+	df.store[10] = 0x00
 
 	// Set field's data type
 	// C (Character)  All OEM code page characters.
@@ -292,14 +302,14 @@ func (dt *Table) addField(fieldName string, fieldType byte, length uint8, decima
 	// N (Numeric)    - . 0 1 2 3 4 5 6 7 8 9
 	// F (Floating Point)   - . 0 1 2 3 4 5 6 7 8 9
 	// L (Logical)    ? Y y N n T t F f (? when not initialized).
-	df.fieldStore[11] = fieldType
+	df.store[11] = fieldType
 
 	// length of field
-	df.fieldStore[16] = length
+	df.store[16] = length
 
 	// number of decimal places
 	// Applicable only to number/float
-	df.fieldStore[17] = df.fieldDecimalPlaces
+	df.store[17] = df.decimalPlaces
 
 	dt.fields = append(dt.fields, *df)
 
@@ -320,32 +330,32 @@ func (dt *Table) updateHeader() {
 	// set dbase file signature
 	slice[0] = 0x03
 
-	var lengthOfEachRecord uint16 = 0
+	var lengthOfEachRecord uint16
 
-	for i := range dt.Fields() {
-		lengthOfEachRecord += uint16(dt.Fields()[i].fieldLength)
-		slice = appendSlice(slice, dt.Fields()[i].fieldStore[:])
+	for i, field := range dt.Fields() {
+		lengthOfEachRecord += uint16(field.length)
+		slice = append(slice, field.store[:]...)
 
 		// don't forget to update fieldMap. We need it to find the index of a field name
-		dt.fieldMap[dt.Fields()[i].fieldName] = i
+		dt.fieldMap[field.name] = i
 	}
 
 	// end of file header terminator (0Dh)
-	slice = appendSlice(slice, []byte{0x0D})
+	slice = append(slice, 0x0D)
 
 	// now reset dt.dataStore slice with the updated one
 	dt.dataStore = slice
 
 	// update the number of bytes in dbase file header
-	dt.numberOfBytesInHeader = uint16(len(slice))
-	s := uint32ToBytes(uint32(dt.numberOfBytesInHeader))
+	dt.Header.headerSize = uint16(len(slice))
+	s := uint32ToBytes(uint32(dt.Header.headerSize))
 	dt.dataStore[8] = s[0]
 	dt.dataStore[9] = s[1]
 
-	dt.lengthOfEachRecord = lengthOfEachRecord + 1 // dont forget to add "1" for deletion marker which is 20h
+	dt.Header.recordSize = lengthOfEachRecord + 1 // dont forget to add "1" for deletion marker which is 20h
 
 	// update the lenght of each record
-	s = uint32ToBytes(uint32(dt.lengthOfEachRecord))
+	s = uint32ToBytes(uint32(dt.Header.recordSize))
 	dt.dataStore[10] = s[0]
 	dt.dataStore[11] = s[1]
 
@@ -366,7 +376,7 @@ func (dt *Table) GetRowAsSlice(row int) []string {
 func (dt *Table) HasField(fieldName string) bool {
 
 	for i := 0; i < len(dt.fields); i++ {
-		if dt.fields[i].fieldName == fieldName {
+		if dt.fields[i].name == fieldName {
 			return true
 		}
 	}
@@ -380,9 +390,9 @@ func (dt *Table) DecimalPlacesInField(fieldName string) (uint8, error) {
 	}
 
 	for i := 0; i < len(dt.fields); i++ {
-		if dt.fields[i].fieldName == fieldName {
+		if dt.fields[i].name == fieldName {
 			if dt.fields[i].fieldType == "N" || dt.fields[i].fieldType == "F" {
-				return dt.fields[i].fieldDecimalPlaces, nil
+				return dt.fields[i].decimalPlaces, nil
 			}
 		}
 	}
@@ -433,21 +443,23 @@ func New(encoding string) (table *Table) {
 	dt.createdFromScratch = true
 
 	// read dbase table header information
-	dt.fileSignature = 0x03
-	dt.updateYear = byte(time.Now().Year() % 100)
-	dt.updateMonth = byte(time.Now().Month())
-	dt.updateDay = byte(time.Now().YearDay())
-	dt.numberOfRecords = 0
-	dt.numberOfBytesInHeader = 32
-	dt.lengthOfEachRecord = 0
+	dt.Header = &Header{
+		Signature:   0x03,
+		updateYear:  byte(time.Now().Year() % 100),
+		updateMonth: byte(time.Now().Month()),
+		updateDay:   byte(time.Now().YearDay()),
+		recordCount: 0,
+		headerSize:  32,
+		recordSize:  0,
+	}
 
 	// create fieldMap to taranslate field name to index
 	dt.fieldMap = make(map[string]int)
 
 	// Number of fields in dbase table
-	dt.numberOfFields = int((dt.numberOfBytesInHeader - 1 - 32) / 32)
+	dt.Header.recordCount = uint32((dt.Header.headerSize - 1 - 32) / 32)
 
-	s := make([]byte, dt.numberOfBytesInHeader)
+	s := make([]byte, dt.Header.headerSize)
 
 	// Since we are reading dbase file from the disk at least at this
 	// phase changing schema of dbase file is not allowed.
@@ -456,10 +468,10 @@ func New(encoding string) (table *Table) {
 	// set DbfTable dataStore slice that will store the complete file in memory
 	dt.dataStore = s
 
-	dt.dataStore[0] = dt.fileSignature
-	dt.dataStore[1] = dt.updateYear
-	dt.dataStore[2] = dt.updateMonth
-	dt.dataStore[3] = dt.updateDay
+	dt.dataStore[0] = dt.Header.Signature
+	dt.dataStore[1] = dt.Header.updateYear
+	dt.dataStore[2] = dt.Header.updateMonth
+	dt.dataStore[3] = dt.Header.updateDay
 
 	// no MDX file (index upon demand)
 	dt.dataStore[28] = 0x00

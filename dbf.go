@@ -1,100 +1,97 @@
 package dbf
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"strings"
 
 	"github.com/axgle/mahonia"
 )
 
-func NewFromFile(fileName string, fileEncoding string) (table *Table, err error) {
-	s, err := readFile(fileName)
+// Open opens a DBF Table from an io.Reader
+func Open(r io.Reader, encoding string) (*Table, error) {
+	return createDbfTable(r, encoding)
+}
+
+// OpenFile opens a DBF Table from file
+func OpenFile(filename string, encoding string) (*Table, error) {
+	f, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
-
-	return createDbfTable(s, fileEncoding)
+	defer f.Close()
+	return Open(f, encoding)
 }
 
-func NewFromByteArray(data []byte, fileEncoding string) (table *Table, err error) {
-	return createDbfTable(data, fileEncoding)
-}
-
-type meta struct {
-	signature   uint8
-	updateYear  uint8
-	updateMonth uint8
-	updateDay   uint8
-	recordCount uint32
-	headerSize  uint16
-	recordSize  uint16
-}
-
-func parseMetadata(reader io.Reader) (*meta, error) {
-	m := make([]byte, 11)
-	n, err := reader.Read(m)
-	if err != nil {
-		return nil, err
-	} else if n != 11 {
-		return nil, fmt.Errorf("file too short: %d bytes", n)
-	}
-
-	return &meta{
-		signature:   m[0],
-		updateYear:  m[1],
-		updateMonth: m[2],
-		updateDay:   m[3],
-		recordCount: uint32(m[4]) | (uint32(m[5]) << 8) | (uint32(m[6]) << 16) | (uint32(m[7]) << 24),
-		headerSize:  uint16(m[8]) | (uint16(m[9]) << 8),
-		recordSize:  uint16(m[10]) | (uint16(m[11]) << 8),
-	}, nil
-}
-
-func createDbfTable(s []byte, fileEncoding string) (table *Table, err error) {
+func createDbfTable(ir io.Reader, fileEncoding string) (table *Table, err error) {
 	// Create and pupulate DbaseTable struct
 	dt := new(Table)
+
+	data, err := ioutil.ReadAll(ir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %v", err)
+	}
 
 	dt.fileEncoding = fileEncoding
 	dt.encoder = mahonia.NewEncoder(fileEncoding)
 	dt.decoder = mahonia.NewDecoder(fileEncoding)
 
-	// read dbase table header information
-	dt.fileSignature = s[0]
-	dt.updateYear = s[1]
-	dt.updateMonth = s[2]
-	dt.updateDay = s[3]
-	dt.numberOfRecords = uint32(s[4]) | (uint32(s[5]) << 8) | (uint32(s[6]) << 16) | (uint32(s[7]) << 24)
-	dt.numberOfBytesInHeader = uint16(s[8]) | (uint16(s[9]) << 8)
-	dt.lengthOfEachRecord = uint16(s[10]) | (uint16(s[11]) << 8)
+	header, err := parseHeader(bytes.NewReader(data[:12]))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse header: %v", err)
+	}
+	dt.Header = header
 
 	// create fieldMap to taranslate field name to index
 	dt.fieldMap = make(map[string]int)
 
 	// Number of fields in dbase table
-	dt.numberOfFields = int((dt.numberOfBytesInHeader - 1 - 32) / 32)
+	dt.numberOfFields = int((dt.Header.headerSize - 1 - 32) / 32)
 
 	// populate dbf fields
 	for i := 0; i < int(dt.numberOfFields); i++ {
 		offset := (i * 32) + 32
 
-		fieldName := strings.Trim(dt.encoder.ConvertString(string(s[offset:offset+10])), string([]byte{0}))
+		fieldName := strings.Trim(dt.encoder.ConvertString(string(data[offset:offset+10])), "\x00")
 		dt.fieldMap[fieldName] = i
 
 		var err error
 
-		switch s[offset+11] {
+		switch data[offset+11] {
+		case 'B':
+			// TODO: Handle binary
+			break
 		case 'C':
-			err = dt.AddTextField(fieldName, s[offset+16])
-		case 'N':
-			err = dt.AddNumberField(fieldName, s[offset+16], s[offset+17])
-		case 'F':
-			err = dt.AddFloatField(fieldName, s[offset+16], s[offset+17])
-		case 'L':
-			err = dt.AddBooleanField(fieldName)
+			err = dt.AddTextField(fieldName, data[offset+16])
 		case 'D':
 			err = dt.AddDateField(fieldName)
+		case 'N':
+			err = dt.AddNumberField(fieldName, data[offset+16], data[offset+17])
+		case 'L':
+			err = dt.AddBooleanField(fieldName)
+		case 'M':
+			// TODO: Handle memo
+			break
+		case '@':
+			// TODO: Handle Timestamp
+			break
+		case 'I':
+			// TODO: Handle Long
+			break
+		case '+':
+			// TODO: Handle auto increment
+			break
+		case 'F':
+			err = dt.AddFloatField(fieldName, data[offset+16], data[offset+17])
+		case 'O':
+			// TODO: Handle double
+			break
+		case 'G':
+			// TODO: Handle OLE
+			break
 		}
 
 		// Check return value for errors
@@ -108,35 +105,12 @@ func createDbfTable(s []byte, fileEncoding string) (table *Table, err error) {
 	dt.dataEntryStarted = true
 
 	// set DbfTable dataStore slice that will store the complete file in memory
-	dt.dataStore = s
+	dt.dataStore = data
 
 	return dt, nil
 }
 
-func (dt *Table) SaveFile(filename string) (err error) {
-
-	f, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-
-	defer f.Close()
-
-	dsBytes, dsErr := f.Write(dt.dataStore)
-
-	if dsErr != nil {
-		return dsErr
-	}
-
-	// Add dbase end of file marker (1Ah)
-
-	footerByte, footerErr := f.Write([]byte{0x1A})
-
-	if footerErr != nil {
-		return footerErr
-	}
-
-	fmt.Printf("%v bytes written to file '%v'.\n", dsBytes+footerByte, filename)
-
-	return nil
+// SaveFile saves table to a file
+func (dt *Table) SaveFile(filename string) error {
+	return ioutil.WriteFile(filename, append(dt.dataStore, 0x1A), os.ModePerm)
 }
