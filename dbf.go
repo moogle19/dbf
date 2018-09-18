@@ -6,26 +6,24 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-
-	"github.com/axgle/mahonia"
 )
 
 // Open opens a DBF Table from an io.Reader
-func Open(r io.Reader, encoding string) (*Table, error) {
-	return createDbfTable(r, encoding)
+func Open(r io.Reader) (*Table, error) {
+	return createDbfTable(r)
 }
 
 // OpenFile opens a DBF Table from file
-func OpenFile(filename string, encoding string) (*Table, error) {
+func OpenFile(filename string) (*Table, error) {
 	f, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	return Open(f, encoding)
+	return Open(f)
 }
 
-func createDbfTable(ir io.Reader, fileEncoding string) (table *Table, err error) {
+func createDbfTable(ir io.Reader) (table *Table, err error) {
 	// Create and pupulate DbaseTable struct
 	t := new(Table)
 
@@ -34,11 +32,6 @@ func createDbfTable(ir io.Reader, fileEncoding string) (table *Table, err error)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %v", err)
 	}
-
-	// Initalize encoder
-	t.fileEncoding = fileEncoding
-	t.encoder = mahonia.NewEncoder(fileEncoding)
-	t.decoder = mahonia.NewDecoder(fileEncoding)
 
 	// Parse header
 	header, err := parseHeader(bytes.NewReader(data[:12]))
@@ -52,7 +45,7 @@ func createDbfTable(ir io.Reader, fileEncoding string) (table *Table, err error)
 
 	columnHeaderSize := fieldCount * 32
 
-	columns, err := parseColumns(data[32:columnHeaderSize], 32, &t.decoder)
+	columns, err := parseColumns(data[32:columnHeaderSize], 32)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +60,7 @@ func createDbfTable(ir io.Reader, fileEncoding string) (table *Table, err error)
 
 	// Iterate rows
 	for i := 0; i < len(rowData); i += rowLength + 1 {
-		row, err := parseRow(rowData[i:i+rowLength+1], columns, &t.decoder)
+		row, err := parseRow(rowData[i:i+rowLength+1], columns)
 		if err != nil {
 			return nil, err
 		}

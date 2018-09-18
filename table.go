@@ -2,8 +2,6 @@ package dbf
 
 import (
 	"time"
-
-	"github.com/axgle/mahonia"
 )
 
 const (
@@ -35,21 +33,13 @@ type Table struct {
 	Header  *Header
 	Columns Columns
 	Rows    []*Row
-
-	fileEncoding string
-	encoder      mahonia.Encoder
-	decoder      mahonia.Decoder
 }
 
 // New creates a new dBase database from scratch
-func New(encoding string) (table *Table) {
+func New() (table *Table) {
 
 	// Create and populate DbaseTable struct
 	dt := new(Table)
-
-	dt.fileEncoding = encoding
-	dt.encoder = mahonia.NewEncoder(encoding)
-	dt.decoder = mahonia.NewDecoder(encoding)
 
 	// set whether or not this table has been created from scratch
 

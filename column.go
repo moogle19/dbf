@@ -2,8 +2,6 @@ package dbf
 
 import (
 	"strings"
-
-	"github.com/axgle/mahonia"
 )
 
 // Column represents a dBase column
@@ -18,12 +16,12 @@ type Column struct {
 // Columns is a slice of Columns
 type Columns []*Column
 
-func newColumn(rawData []byte, dec *mahonia.Decoder) (*Column, error) {
+func newColumn(rawData []byte) (*Column, error) {
 	if len(rawData) != 32 {
 		return nil, ErrInvalidColumnData
 	}
 
-	name := strings.Trim(dec.ConvertString(string(rawData[:10])), "\x00")
+	name := strings.Trim(string(rawData[:10]), "\x00")
 	ct, err := getColumnType(rawData[11])
 	if err != nil {
 		return nil, err
@@ -51,12 +49,12 @@ func (c Columns) RowLength() int {
 	return length
 }
 
-func parseColumns(rawData []byte, columnLength int, dec *mahonia.Decoder) (Columns, error) {
+func parseColumns(rawData []byte, columnLength int) (Columns, error) {
 	var columns []*Column
 
 	for i := 0; i < len(rawData); i += columnLength {
 
-		column, err := newColumn(rawData[i:i+columnLength], dec)
+		column, err := newColumn(rawData[i : i+columnLength])
 		if err != nil {
 			return nil, err
 		}

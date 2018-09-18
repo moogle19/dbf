@@ -3,8 +3,6 @@ package dbf
 import (
 	"fmt"
 	"strings"
-
-	"github.com/axgle/mahonia"
 )
 
 // Row represents a single row in the dbf database
@@ -27,7 +25,7 @@ func (r *Row) String() string {
 	return str + "]"
 }
 
-func parseRow(rawData []byte, columns Columns, dec *mahonia.Decoder) (*Row, error) {
+func parseRow(rawData []byte, columns Columns) (*Row, error) {
 	r := newRow()
 
 	var offset int
@@ -46,7 +44,7 @@ func parseRow(rawData []byte, columns Columns, dec *mahonia.Decoder) (*Row, erro
 			}
 		}
 
-		value := strings.TrimSpace(dec.ConvertString(string(rawData[offset : offset+length])))
+		value := strings.TrimSpace(string(rawData[offset : offset+length]))
 
 		r.fields[c.Name] = &Field{
 			column: c,
