@@ -6,7 +6,9 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/axgle/mahonia"
 )
@@ -28,89 +30,169 @@ func OpenFile(filename string, encoding string) (*Table, error) {
 
 func createDbfTable(ir io.Reader, fileEncoding string) (table *Table, err error) {
 	// Create and pupulate DbaseTable struct
-	dt := new(Table)
+	t := new(Table)
 
+	// read complete table
 	data, err := ioutil.ReadAll(ir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %v", err)
 	}
 
-	dt.fileEncoding = fileEncoding
-	dt.encoder = mahonia.NewEncoder(fileEncoding)
-	dt.decoder = mahonia.NewDecoder(fileEncoding)
+	// Initalize encoder
+	t.fileEncoding = fileEncoding
+	t.encoder = mahonia.NewEncoder(fileEncoding)
+	t.decoder = mahonia.NewDecoder(fileEncoding)
 
+	// Parse header
 	header, err := parseHeader(bytes.NewReader(data[:12]))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse header: %v", err)
 	}
-	dt.Header = header
+	t.Header = header
 
-	// create fieldMap to taranslate field name to index
-	dt.fieldMap = make(map[string]int)
+	// Parse columns
+	fieldCount := (t.Header.HeaderSize() - 1) / 32
+	columnHeaderSize := fieldCount * 32
+	columns, err := t.parseColumns(data[32:columnHeaderSize])
+	if err != nil {
+		return nil, err
+	}
 
-	// Number of fields in dbase table
-	dt.numberOfFields = int((dt.Header.headerSize - 1 - 32) / 32)
+	// Parse rows
+	offset := int(header.HeaderSize())
 
-	// populate dbf fields
-	for i := 0; i < int(dt.numberOfFields); i++ {
-		offset := (i * 32) + 32
+	rowData := data[offset+1:]
+	rowLength := columns.RowLength()
 
-		fieldName := strings.Trim(dt.encoder.ConvertString(string(data[offset:offset+10])), "\x00")
-		dt.fieldMap[fieldName] = i
+	var rows []*Row
 
-		var err error
+	// Iterate rows
+	for i := 0; i < len(data); i += rowLength + 1 {
+		var r Row
 
-		switch data[offset+11] {
-		case 'B':
-			// TODO: Handle binary
-			break
-		case 'C':
-			err = dt.AddTextField(fieldName, data[offset+16])
-		case 'D':
-			err = dt.AddDateField(fieldName)
-		case 'N':
-			err = dt.AddNumberField(fieldName, data[offset+16], data[offset+17])
-		case 'L':
-			err = dt.AddBooleanField(fieldName)
-		case 'M':
-			// TODO: Handle memo
-			break
-		case '@':
-			// TODO: Handle Timestamp
-			break
-		case 'I':
-			// TODO: Handle Long
-			break
-		case '+':
-			// TODO: Handle auto increment
-			break
-		case 'F':
-			err = dt.AddFloatField(fieldName, data[offset+16], data[offset+17])
-		case 'O':
-			// TODO: Handle double
-			break
-		case 'G':
-			// TODO: Handle OLE
-			break
+		off := i
+		for _, c := range columns {
+			var field Field
+			field.column = c
+
+			l := c.Length
+			for i, b := range rowData[off : off+c.Length] {
+				if b == byte(0) {
+					l = i
+					break
+				}
+			}
+			field.value = strings.TrimSpace(t.decoder.ConvertString(string(rowData[off : off+l])))
+			r.Fields = append(r.Fields, field)
+
+			off += c.Length
 		}
 
-		// Check return value for errors
+		rows = append(rows, &r)
+
+	}
+
+	t.Columns = columns
+	t.Rows = rows
+
+	return t, nil
+}
+
+func (c Columns) RowLength() int {
+	var length int
+	for _, column := range c {
+		length += column.Length
+	}
+
+	return length
+}
+
+type Row struct {
+	Fields []Field
+}
+
+type Field struct {
+	column *Column
+	value  string
+}
+
+func (f *Field) String() string {
+	return f.value
+}
+
+func (f *Field) Float() (float64, error) {
+	if f.column.Type != TypeNumber && f.column.Type != TypeFloat {
+		return 0.0, fmt.Errorf("invalid field type")
+	}
+	return strconv.ParseFloat(f.value, 64)
+}
+
+func (f *Field) Int() (int, error) {
+	if f.column.Type != TypeNumber {
+		return 0, fmt.Errorf("invalid field type")
+	}
+	return strconv.Atoi(f.value)
+}
+
+func (f *Field) Date() (time.Time, error) {
+	if f.column.Type != TypeDate {
+		return time.Time{}, fmt.Errorf("invalid field type")
+	}
+	return time.Parse("20060102", f.value)
+}
+
+type Columns []*Column
+
+type Column struct {
+	Name          string
+	Type          ColumnType
+	Length        int
+	DecimalPlaces int
+}
+
+type ColumnType rune
+
+var (
+	TypeText    ColumnType = 'C'
+	TypeBool    ColumnType = 'L'
+	TypeDate    ColumnType = 'D'
+	TypeNumber  ColumnType = 'N'
+	TypeFloat   ColumnType = 'F'
+	TypeMemo    ColumnType = 'M'
+	TypeUnknown ColumnType = '?'
+)
+
+func getColumnType(r byte) (ColumnType, error) {
+	for _, t := range []ColumnType{TypeText, TypeBool, TypeDate, TypeNumber, TypeFloat, TypeMemo} {
+		if t == ColumnType(r) {
+			return ColumnType(r), nil
+		}
+	}
+	return TypeUnknown, fmt.Errorf("column / field type %c is not supported", r)
+}
+
+func (dt *Table) parseColumns(d []byte) (Columns, error) {
+	var columns []*Column
+	for i := 0; i < len(d); i += 32 {
+		name := strings.Trim(dt.encoder.ConvertString(string(d[i:i+10])), "\x00")
+		ct, err := getColumnType(d[i+11])
 		if err != nil {
 			return nil, err
 		}
+
+		length := int(d[i+16])
+		decimalPlaces := int(d[i+17])
+
+		column := Column{
+			Name:          name,
+			Type:          ct,
+			Length:        length,
+			DecimalPlaces: decimalPlaces,
+		}
+
+		columns = append(columns, &column)
 	}
 
-	// Since we are reading dbase file from the disk at least at this
-	// phase changing schema of dbase file is not allowed.
-	dt.dataEntryStarted = true
+	return columns, nil
 
-	// set DbfTable dataStore slice that will store the complete file in memory
-	dt.dataStore = data
-
-	return dt, nil
-}
-
-// SaveFile saves table to a file
-func (dt *Table) SaveFile(filename string) error {
-	return ioutil.WriteFile(filename, append(dt.dataStore, 0x1A), os.ModePerm)
 }
