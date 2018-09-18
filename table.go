@@ -2,6 +2,7 @@ package dbf
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -285,8 +286,6 @@ func (dt *Table) addField(fieldName string, fieldType byte, length uint8, decima
 
 	slice := dt.convertToByteSlice(normalizedFieldName, 10)
 
-	//fmt.Printf("len slice:%v\n", len(slice))
-
 	// Field name in ASCII (max 10 chracters)
 	for i := 0; i < len(slice); i++ {
 		df.store[i] = slice[i]
@@ -373,10 +372,11 @@ func (dt *Table) GetRowAsSlice(row int) []string {
 	return s
 }
 
+// HasField checks if the table has a field by the given name
 func (dt *Table) HasField(fieldName string) bool {
 
-	for i := 0; i < len(dt.fields); i++ {
-		if dt.fields[i].name == fieldName {
+	for _, field := range dt.fields {
+		if field.name == fieldName {
 			return true
 		}
 	}
@@ -386,18 +386,16 @@ func (dt *Table) HasField(fieldName string) bool {
 
 func (dt *Table) DecimalPlacesInField(fieldName string) (uint8, error) {
 	if !dt.HasField(fieldName) {
-		return 0, errors.New("Field name \"" + fieldName + "\" does not exist. ")
+		return 0, fmt.Errorf("field name %s does not exist", fieldName)
 	}
 
-	for i := 0; i < len(dt.fields); i++ {
-		if dt.fields[i].name == fieldName {
-			if dt.fields[i].fieldType == "N" || dt.fields[i].fieldType == "F" {
-				return dt.fields[i].decimalPlaces, nil
-			}
+	for _, field := range dt.fields {
+		if field.name == fieldName && (field.fieldType == "N" || field.fieldType == "F") {
+			return field.decimalPlaces, nil
 		}
 	}
 
-	return 0, errors.New("Type of field \"" + fieldName + "\" is not Numeric or Float.")
+	return 0, fmt.Errorf("field type of %s is neither numeric nor float", fieldName)
 }
 
 // convertToBytesSlice converts value to byte slice according to given encoding and return
