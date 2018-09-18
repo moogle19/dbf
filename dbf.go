@@ -6,7 +6,6 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"strings"
 
 	"github.com/axgle/mahonia"
 )
@@ -67,28 +66,12 @@ func createDbfTable(ir io.Reader, fileEncoding string) (table *Table, err error)
 	var rows []*Row
 
 	// Iterate rows
-	for i := 0; i < len(data); i += rowLength + 1 {
-		var r Row
-
-		off := i
-		for _, c := range columns {
-			var field Field
-			field.column = c
-
-			l := c.Length
-			for i, b := range rowData[off : off+c.Length] {
-				if b == byte(0) {
-					l = i
-					break
-				}
-			}
-			field.value = strings.TrimSpace(t.decoder.ConvertString(string(rowData[off : off+l])))
-			r.Fields = append(r.Fields, field)
-
-			off += c.Length
+	for i := 0; i < len(rowData); i += rowLength + 1 {
+		row, err := parseRow(rowData[i:i+rowLength+1], columns, &t.decoder)
+		if err != nil {
+			return nil, err
 		}
-
-		rows = append(rows, &r)
+		rows = append(rows, row)
 
 	}
 

@@ -12,6 +12,7 @@ type Column struct {
 	Type          ColumnType
 	Length        int
 	DecimalPlaces int
+	index         int
 }
 
 // Columns is a slice of Columns
