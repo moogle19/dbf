@@ -6,9 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/axgle/mahonia"
 )
@@ -52,8 +50,10 @@ func createDbfTable(ir io.Reader, fileEncoding string) (table *Table, err error)
 
 	// Parse columns
 	fieldCount := (t.Header.HeaderSize() - 1) / 32
+
 	columnHeaderSize := fieldCount * 32
-	columns, err := t.parseColumns(data[32:columnHeaderSize])
+
+	columns, err := parseColumns(data[32:columnHeaderSize], 32, &t.decoder)
 	if err != nil {
 		return nil, err
 	}
@@ -96,103 +96,4 @@ func createDbfTable(ir io.Reader, fileEncoding string) (table *Table, err error)
 	t.Rows = rows
 
 	return t, nil
-}
-
-func (c Columns) RowLength() int {
-	var length int
-	for _, column := range c {
-		length += column.Length
-	}
-
-	return length
-}
-
-type Row struct {
-	Fields []Field
-}
-
-type Field struct {
-	column *Column
-	value  string
-}
-
-func (f *Field) String() string {
-	return f.value
-}
-
-func (f *Field) Float() (float64, error) {
-	if f.column.Type != TypeNumber && f.column.Type != TypeFloat {
-		return 0.0, fmt.Errorf("invalid field type")
-	}
-	return strconv.ParseFloat(f.value, 64)
-}
-
-func (f *Field) Int() (int, error) {
-	if f.column.Type != TypeNumber {
-		return 0, fmt.Errorf("invalid field type")
-	}
-	return strconv.Atoi(f.value)
-}
-
-func (f *Field) Date() (time.Time, error) {
-	if f.column.Type != TypeDate {
-		return time.Time{}, fmt.Errorf("invalid field type")
-	}
-	return time.Parse("20060102", f.value)
-}
-
-type Columns []*Column
-
-type Column struct {
-	Name          string
-	Type          ColumnType
-	Length        int
-	DecimalPlaces int
-}
-
-type ColumnType rune
-
-var (
-	TypeText    ColumnType = 'C'
-	TypeBool    ColumnType = 'L'
-	TypeDate    ColumnType = 'D'
-	TypeNumber  ColumnType = 'N'
-	TypeFloat   ColumnType = 'F'
-	TypeMemo    ColumnType = 'M'
-	TypeUnknown ColumnType = '?'
-)
-
-func getColumnType(r byte) (ColumnType, error) {
-	for _, t := range []ColumnType{TypeText, TypeBool, TypeDate, TypeNumber, TypeFloat, TypeMemo} {
-		if t == ColumnType(r) {
-			return ColumnType(r), nil
-		}
-	}
-	return TypeUnknown, fmt.Errorf("column / field type %c is not supported", r)
-}
-
-func (dt *Table) parseColumns(d []byte) (Columns, error) {
-	var columns []*Column
-	for i := 0; i < len(d); i += 32 {
-		name := strings.Trim(dt.encoder.ConvertString(string(d[i:i+10])), "\x00")
-		ct, err := getColumnType(d[i+11])
-		if err != nil {
-			return nil, err
-		}
-
-		length := int(d[i+16])
-		decimalPlaces := int(d[i+17])
-
-		column := Column{
-			Name:          name,
-			Type:          ct,
-			Length:        length,
-			DecimalPlaces: decimalPlaces,
-		}
-
-		columns = append(columns, &column)
-	}
-
-	return columns, nil
-
 }
