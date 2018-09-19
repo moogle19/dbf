@@ -32,7 +32,7 @@ func (f *Field) Float() (float64, error) {
 		return 0.0, ErrEmptyField
 	}
 	if f.column.Type != TypeNumber && f.column.Type != TypeFloat {
-		return 0.0, fmt.Errorf("invalid field type")
+		return 0.0, fmt.Errorf("Float(): invalid field type: %v", f.column.Type)
 	}
 	return strconv.ParseFloat(f.value, 64)
 }
@@ -44,7 +44,7 @@ func (f *Field) Int() (int, error) {
 		return 0, ErrEmptyField
 	}
 	if f.column.Type != TypeNumber {
-		return 0, fmt.Errorf("invalid field type")
+		return 0, fmt.Errorf("Int(): invalid field type: %v", f.column.Type)
 	}
 
 	return strconv.Atoi(f.value)
@@ -57,7 +57,7 @@ func (f *Field) Int64() (int64, error) {
 		return 0, ErrEmptyField
 	}
 	if f.column.Type != TypeNumber {
-		return 0, fmt.Errorf("invalid field type")
+		return 0, fmt.Errorf("Int64(): invalid field type: %v", f.column.Type)
 	}
 
 	return strconv.ParseInt(f.value, 10, 64)
@@ -70,7 +70,7 @@ func (f *Field) Date() (time.Time, error) {
 		return time.Time{}, ErrEmptyField
 	}
 	if f.column.Type != TypeDate {
-		return time.Time{}, fmt.Errorf("invalid field type")
+		return time.Time{}, fmt.Errorf("Date(): invalid field type: %v", f.column.Type)
 	}
 	return time.Parse("20060102", f.value)
 }

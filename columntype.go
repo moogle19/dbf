@@ -5,6 +5,25 @@ import "fmt"
 // ColumnType is the data type of the dbf column
 type ColumnType rune
 
+func (c ColumnType) String() string {
+	switch c {
+	case TypeText:
+		return "Text"
+	case TypeBool:
+		return "Bool"
+	case TypeDate:
+		return "Date"
+	case TypeNumber:
+		return "Number"
+	case TypeFloat:
+		return "Float"
+	case TypeMemo:
+		return "Memo"
+	default:
+		return "unknown: " + string(c)
+	}
+}
+
 var (
 	// TypeText is a string field
 	TypeText ColumnType = 'C'
