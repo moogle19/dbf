@@ -19,7 +19,7 @@ func (r *Row) String() string {
 		} else {
 			str += ", "
 		}
-		str += fmt.Sprintf("%s -> %v", k, v)
+		str += fmt.Sprintf("%s (%v) -> %v\n", k, v.column.Type, v)
 	}
 
 	return str + "]"

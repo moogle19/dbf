@@ -3,6 +3,7 @@ package dbf
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -23,6 +24,26 @@ func (f *Field) String() string {
 		return ""
 	}
 	return f.value
+}
+
+// Bool return the fields value as bool
+// Default value is false
+// If it is the wrong type an error is returned
+func (f *Field) Bool() (bool, error) {
+	if f.IsEmpty() {
+		return false, nil
+	}
+	if f.column.Type != TypeBool {
+		return false, fmt.Errorf("Bool(): invalid field type: %v", f.column.Type)
+	}
+	switch strings.ToLower(f.value) {
+	case "t":
+		return true, nil
+	case "f":
+		return false, nil
+	default:
+		return false, fmt.Errorf("Bool(): invalid value: %v", f.value)
+	}
 }
 
 // Float returns the fields value as float
