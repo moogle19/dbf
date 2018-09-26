@@ -3,6 +3,8 @@ package dbf
 import (
 	"fmt"
 	"strings"
+
+	"golang.org/x/text/encoding/charmap"
 )
 
 // Row represents a single row in the dbf database
@@ -25,7 +27,7 @@ func (r *Row) String() string {
 	return str + "]"
 }
 
-func parseRow(rawData []byte, columns Columns) (*Row, error) {
+func parseRow(rawData []byte, columns Columns, encoding Encoding) (*Row, error) {
 	r := newRow()
 
 	var offset int
@@ -44,7 +46,18 @@ func parseRow(rawData []byte, columns Columns) (*Row, error) {
 			}
 		}
 
-		value := strings.TrimSpace(string(rawData[offset : offset+length]))
+		data := rawData[offset : offset+length]
+
+		if encoding != nil {
+			var err error
+			dec := (*charmap.Charmap)(encoding).NewDecoder()
+			data, err = dec.Bytes(data)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		value := strings.TrimSpace(string(data))
 
 		r.fields[c.Name] = &Field{
 			column: c,

@@ -1,7 +1,9 @@
 package dbf
 
 import (
-	"strings"
+	"bytes"
+
+	"golang.org/x/text/encoding/charmap"
 )
 
 // Column represents a dBase column
@@ -16,12 +18,22 @@ type Column struct {
 // Columns is a slice of Columns
 type Columns []*Column
 
-func newColumn(rawData []byte) (*Column, error) {
+func newColumn(rawData []byte, encoding Encoding) (*Column, error) {
 	if len(rawData) != 32 {
 		return nil, ErrInvalidColumnData
 	}
 
-	name := strings.Trim(string(rawData[:10]), "\x00")
+	nameData := rawData[:10]
+	if encoding != nil {
+		var err error
+		dec := (*charmap.Charmap)(encoding).NewDecoder()
+		nameData, err = dec.Bytes(rawData[:10])
+		if err != nil {
+			return nil, err
+		}
+	}
+	name := string(bytes.Trim(nameData, "\x00"))
+
 	ct, err := getColumnType(rawData[11])
 	if err != nil {
 		return nil, err
@@ -49,12 +61,12 @@ func (c Columns) RowLength() int {
 	return length
 }
 
-func parseColumns(rawData []byte, columnLength int) (Columns, error) {
+func parseColumns(rawData []byte, columnLength int, encoding Encoding) (Columns, error) {
 	var columns []*Column
 
 	for i := 0; i < len(rawData); i += columnLength {
 
-		column, err := newColumn(rawData[i : i+columnLength])
+		column, err := newColumn(rawData[i:i+columnLength], encoding)
 		if err != nil {
 			return nil, err
 		}
