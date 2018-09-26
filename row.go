@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/encoding"
 )
 
 // Row represents a single row in the dbf database
@@ -27,7 +27,7 @@ func (r *Row) String() string {
 	return str + "]"
 }
 
-func parseRow(rawData []byte, columns Columns, encoding Encoding) (*Row, error) {
+func parseRow(rawData []byte, columns Columns, enc encoding.Encoding) (*Row, error) {
 	r := newRow()
 
 	var offset int
@@ -48,9 +48,9 @@ func parseRow(rawData []byte, columns Columns, encoding Encoding) (*Row, error) 
 
 		data := rawData[offset : offset+length]
 
-		if encoding != nil {
+		if enc != encoding.Nop {
 			var err error
-			dec := (*charmap.Charmap)(encoding).NewDecoder()
+			dec := enc.NewDecoder()
 			data, err = dec.Bytes(data)
 			if err != nil {
 				return nil, err

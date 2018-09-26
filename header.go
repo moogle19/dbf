@@ -43,7 +43,7 @@ func parseHeader(reader io.Reader) (*Header, error) {
 		return nil, fmt.Errorf("file too short: %d bytes", n)
 	}
 
-	version := VersionUnknown
+	var version Version
 	switch Version(m[0] & 0x7) {
 	case Version5:
 		version = Version5

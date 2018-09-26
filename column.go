@@ -3,7 +3,7 @@ package dbf
 import (
 	"bytes"
 
-	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/encoding"
 )
 
 // Column represents a dBase column
@@ -18,15 +18,15 @@ type Column struct {
 // Columns is a slice of Columns
 type Columns []*Column
 
-func newColumn(rawData []byte, encoding Encoding) (*Column, error) {
+func newColumn(rawData []byte, enc encoding.Encoding) (*Column, error) {
 	if len(rawData) != 32 {
 		return nil, ErrInvalidColumnData
 	}
 
 	nameData := rawData[:10]
-	if encoding != nil {
+	if enc != encoding.Nop {
 		var err error
-		dec := (*charmap.Charmap)(encoding).NewDecoder()
+		dec := enc.NewDecoder()
 		nameData, err = dec.Bytes(rawData[:10])
 		if err != nil {
 			return nil, err
@@ -61,12 +61,12 @@ func (c Columns) RowLength() int {
 	return length
 }
 
-func parseColumns(rawData []byte, columnLength int, encoding Encoding) (Columns, error) {
+func parseColumns(rawData []byte, columnLength int, enc encoding.Encoding) (Columns, error) {
 	var columns []*Column
 
 	for i := 0; i < len(rawData); i += columnLength {
 
-		column, err := newColumn(rawData[i:i+columnLength], encoding)
+		column, err := newColumn(rawData[i:i+columnLength], enc)
 		if err != nil {
 			return nil, err
 		}

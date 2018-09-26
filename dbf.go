@@ -7,42 +7,33 @@ import (
 	"io/ioutil"
 	"os"
 
-	"golang.org/x/text/encoding/charmap"
-)
-
-// Encoding of the source file
-type Encoding *charmap.Charmap
-
-var (
-	EncodingUTF8        Encoding = nil
-	EncodingLatin1      Encoding = charmap.ISO8859_1
-	EncodingWindows1253 Encoding = charmap.Windows1253
+	"golang.org/x/text/encoding"
 )
 
 // Open opens a DBF Table from an io.Reader
 func Open(r io.Reader) (*Table, error) {
-	return OpenWithEncoding(r, EncodingUTF8)
+	return OpenWithEncoding(r, encoding.Nop)
 }
 
-func OpenWithEncoding(r io.Reader, encoding Encoding) (*Table, error) {
-	return createDbfTable(r, encoding)
+func OpenWithEncoding(r io.Reader, enc encoding.Encoding) (*Table, error) {
+	return createDbfTable(r, enc)
 }
 
 // OpenFile opens a DBF Table from file
 func OpenFile(filename string) (*Table, error) {
-	return OpenFileWithEncoding(filename, EncodingUTF8)
+	return OpenFileWithEncoding(filename, encoding.Nop)
 }
 
-func OpenFileWithEncoding(filename string, encoding Encoding) (*Table, error) {
+func OpenFileWithEncoding(filename string, enc encoding.Encoding) (*Table, error) {
 	f, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	return OpenWithEncoding(f, encoding)
+	return OpenWithEncoding(f, enc)
 }
 
-func createDbfTable(ir io.Reader, encoding Encoding) (table *Table, err error) {
+func createDbfTable(ir io.Reader, enc encoding.Encoding) (table *Table, err error) {
 	// Create and pupulate DbaseTable struct
 	t := new(Table)
 
@@ -64,7 +55,7 @@ func createDbfTable(ir io.Reader, encoding Encoding) (table *Table, err error) {
 
 	columnHeaderSize := fieldCount * 32
 
-	columns, err := parseColumns(data[32:columnHeaderSize], 32, encoding)
+	columns, err := parseColumns(data[32:columnHeaderSize], 32, enc)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +70,7 @@ func createDbfTable(ir io.Reader, encoding Encoding) (table *Table, err error) {
 
 	// Iterate rows
 	for i := 0; i < len(rowData); i += rowLength + 1 {
-		row, err := parseRow(rowData[i:i+rowLength+1], columns, encoding)
+		row, err := parseRow(rowData[i:i+rowLength+1], columns, enc)
 		if err != nil {
 			return nil, err
 		}
