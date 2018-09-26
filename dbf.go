@@ -15,6 +15,8 @@ func Open(r io.Reader) (*Table, error) {
 	return OpenWithEncoding(r, encoding.Nop)
 }
 
+// OpenWithEncoding opens a DBF Table from an io.Reader
+// using the specified encoding
 func OpenWithEncoding(r io.Reader, enc encoding.Encoding) (*Table, error) {
 	return createDbfTable(r, enc)
 }
@@ -24,16 +26,24 @@ func OpenFile(filename string) (*Table, error) {
 	return OpenFileWithEncoding(filename, encoding.Nop)
 }
 
-func OpenFileWithEncoding(filename string, enc encoding.Encoding) (*Table, error) {
+// OpenFileWithEncoding opens a DBF Table from file
+// using the specified encoding
+func OpenFileWithEncoding(
+	filename string,
+	enc encoding.Encoding,
+) (*Table, error) {
 	f, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer f.Close() // nolint: errcheck
 	return OpenWithEncoding(f, enc)
 }
 
-func createDbfTable(ir io.Reader, enc encoding.Encoding) (table *Table, err error) {
+func createDbfTable(
+	ir io.Reader,
+	enc encoding.Encoding,
+) (table *Table, err error) {
 	// Create and pupulate DbaseTable struct
 	t := new(Table)
 
@@ -61,7 +71,7 @@ func createDbfTable(ir io.Reader, enc encoding.Encoding) (table *Table, err erro
 	}
 
 	// Parse rows
-	offset := int(header.HeaderSize())
+	offset := header.HeaderSize()
 
 	rowData := data[offset+1:]
 	rowLength := columns.RowLength()

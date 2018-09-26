@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// Header represents the DBF header
 type Header struct {
 	Version     Version
 	Signature   uint8
@@ -18,20 +19,33 @@ type Header struct {
 	recordSize  uint16
 }
 
+// RecordCount returns the number of records in the DBF
 func (h *Header) RecordCount() int {
 	return int(h.recordCount)
 }
 
+// HeaderSize returns the size of the header
 func (h *Header) HeaderSize() int {
 	return int(h.headerSize)
 }
 
+// RecordSize returns the size of a single record
 func (h *Header) RecordSize() int {
 	return int(h.recordSize)
 }
 
+// UpdatedAt returns the last update timestamp of the dbf
 func (h *Header) UpdatedAt() time.Time {
-	return time.Date(int(h.updateYear), time.Month(h.updateMonth), int(h.updateDay), 0, 0, 0, 0, time.Local)
+	return time.Date(
+		int(h.updateYear),
+		time.Month(h.updateMonth),
+		int(h.updateDay),
+		0,
+		0,
+		0,
+		0,
+		time.Local,
+	)
 }
 
 func parseHeader(reader io.Reader) (*Header, error) {

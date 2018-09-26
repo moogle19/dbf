@@ -27,7 +27,11 @@ func (r *Row) String() string {
 	return str + "]"
 }
 
-func parseRow(rawData []byte, columns Columns, enc encoding.Encoding) (*Row, error) {
+func parseRow(
+	rawData []byte,
+	columns Columns,
+	enc encoding.Encoding,
+) (*Row, error) {
 	r := newRow()
 
 	var offset int
@@ -82,7 +86,7 @@ func (r *Row) IsEmpty() bool {
 }
 
 // FieldByName returns the field with the specified name
-// If not found, nil is returned
+// If not found, ErrInvalidFieldName is returned
 func (r *Row) FieldByName(name string) (*Field, error) {
 	val, ok := r.fields[name]
 	if !ok {
@@ -91,6 +95,8 @@ func (r *Row) FieldByName(name string) (*Field, error) {
 	return val, nil
 }
 
+// FieldByIndex returns the field at the specified index
+// If the index is to big, ErrIndexOutOfBounds is returned
 func (r *Row) FieldByIndex(index int) (*Field, error) {
 	if index >= len(r.fields) {
 		return nil, ErrIndexOutOfBounds

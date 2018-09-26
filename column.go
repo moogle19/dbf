@@ -61,7 +61,11 @@ func (c Columns) RowLength() int {
 	return length
 }
 
-func parseColumns(rawData []byte, columnLength int, enc encoding.Encoding) (Columns, error) {
+func parseColumns(
+	rawData []byte,
+	columnLength int,
+	enc encoding.Encoding,
+) (Columns, error) {
 	var columns []*Column
 
 	for i := 0; i < len(rawData); i += columnLength {

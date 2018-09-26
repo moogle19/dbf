@@ -26,6 +26,11 @@ func (f *Field) String() string {
 	return f.value
 }
 
+// Name returns the column name for the field
+func (f *Field) Name() string {
+	return f.column.Name
+}
+
 // Bool return the fields value as bool
 // Default value is false
 // If it is the wrong type an error is returned
@@ -34,7 +39,10 @@ func (f *Field) Bool() (bool, error) {
 		return false, nil
 	}
 	if f.column.Type != TypeBool {
-		return false, fmt.Errorf("Bool(): invalid field type: %v", f.column.Type)
+		return false, fmt.Errorf(
+			"Bool(): invalid field type: %v",
+			f.column.Type,
+		)
 	}
 	switch strings.ToLower(f.value) {
 	case "t":
@@ -53,7 +61,10 @@ func (f *Field) Float() (float64, error) {
 		return 0.0, ErrEmptyField
 	}
 	if f.column.Type != TypeNumber && f.column.Type != TypeFloat {
-		return 0.0, fmt.Errorf("Float(): invalid field type: %v", f.column.Type)
+		return 0.0, fmt.Errorf(
+			"Float(): invalid field type: %v",
+			f.column.Type,
+		)
 	}
 	return strconv.ParseFloat(f.value, 64)
 }
@@ -65,7 +76,10 @@ func (f *Field) Int() (int, error) {
 		return 0, ErrEmptyField
 	}
 	if f.column.Type != TypeNumber {
-		return 0, fmt.Errorf("Int(): invalid field type: %v", f.column.Type)
+		return 0, fmt.Errorf(
+			"Int(): invalid field type: %v",
+			f.column.Type,
+		)
 	}
 
 	return strconv.Atoi(f.value)
@@ -78,7 +92,10 @@ func (f *Field) Int64() (int64, error) {
 		return 0, ErrEmptyField
 	}
 	if f.column.Type != TypeNumber {
-		return 0, fmt.Errorf("Int64(): invalid field type: %v", f.column.Type)
+		return 0, fmt.Errorf(
+			"Int64(): invalid field type: %v",
+			f.column.Type,
+		)
 	}
 
 	return strconv.ParseInt(f.value, 10, 64)
@@ -91,7 +108,10 @@ func (f *Field) Date() (time.Time, error) {
 		return time.Time{}, ErrEmptyField
 	}
 	if f.column.Type != TypeDate {
-		return time.Time{}, fmt.Errorf("Date(): invalid field type: %v", f.column.Type)
+		return time.Time{}, fmt.Errorf(
+			"Date(): invalid field type: %v",
+			f.column.Type,
+		)
 	}
 	return time.Parse("20060102", f.value)
 }

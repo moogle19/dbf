@@ -41,16 +41,17 @@ var (
 	TypeUnknown ColumnType = '?'
 )
 
-var allowedTypes = []ColumnType{
-	TypeText,
-	TypeBool,
-	TypeDate,
-	TypeNumber,
-	TypeFloat,
-	TypeMemo,
-}
-
 func getColumnType(r byte) (ColumnType, error) {
+
+	allowedTypes := []ColumnType{
+		TypeText,
+		TypeBool,
+		TypeDate,
+		TypeNumber,
+		TypeFloat,
+		TypeMemo,
+	}
+
 	for _, t := range allowedTypes {
 		if t == ColumnType(r) {
 			return ColumnType(r), nil
