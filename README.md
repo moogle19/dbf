@@ -14,6 +14,3 @@ import (
   "github.com/moogle19/dbf"
 )
 ```
-
-## Licence: 
-  This library is made available as-is under the [Apache Licence 2.0](http://www.apache.org/licenses/LICENSE-2.0).
