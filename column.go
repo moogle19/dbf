@@ -2,7 +2,6 @@ package dbf
 
 import (
 	"bytes"
-
 	"golang.org/x/text/encoding"
 )
 
@@ -32,7 +31,11 @@ func newColumn(rawData []byte, enc encoding.Encoding) (*Column, error) {
 			return nil, err
 		}
 	}
-	name := string(bytes.Trim(nameData, "\x00"))
+
+	// a column name can be shorter than 10 runes and earlier terminated by byte(0) character
+	neededByShortColumnNames := bytes.Split(nameData, []byte("\x00"))
+	byteRespTrim := bytes.Trim(neededByShortColumnNames[0], "\x00")
+	name := string(byteRespTrim)
 
 	ct, err := getColumnType(rawData[11])
 	if err != nil {
